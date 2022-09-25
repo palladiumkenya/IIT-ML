@@ -11,57 +11,57 @@ registerDoParallel(numCores)
 
 setwd("~/Kenya/IIT")
 
-# source("utils.R")
-# 
-# xgb <- readRDS("iit_xgb_0725.rds")
-# 
-# actives <- readxl::read_xlsx("ARTPatients_details.xlsx")
+source("utils.R")
+
+xgb <- readRDS("iit_xgb_0725.rds")
+
+actives <- readxl::read_xlsx("ARTPatients_details.xlsx")
 
 dem <- read.csv('OneDrive_1_7-25-2022/Patients_slim.csv', stringsAsFactors = FALSE)
-# dem <- dem[dem$PatientCCCNumber %in% unique(actives$PatientID), ]
-# dem$DOB <- ymd(dem$DOB)
-# dem$Age <- floor((Sys.Date() - dem$DOB) / 365)
-# art <- read.csv('OneDrive_1_7-25-2022/ART_slim.csv', stringsAsFactors = FALSE)
-visits <- read.csv('visits_for_active_patients_20220727_V2/visits_for_active_patients_20220727_V2.csv', stringsAsFactors = FALSE)
-# lab <- read.csv('OneDrive_1_7-25-2022/labs.slim.csv', stringsAsFactors = FALSE)
-# pharmacy <- read.csv('OneDrive_1_7-25-2022/pharmacy_slim.csv', stringsAsFactors = FALSE)
-# gis <- readRDS('gis_features_iit.rds') %>% dplyr::select(-Latitude, -Longitude)
-# 
-# PATIENTS_IDS <- unique(dem$PatientID)
-# 
-# vec <- floor(seq(1, length(PATIENTS_IDS), length.out = 100))
-# 
-# for(a in 1:(length(vec)-1)){
-#   print(Sys.time())
-#   PATIENTS <- PATIENTS_IDS[vec[a]:vec[a+1]]
-#   
-#   dem_features <- genDemographicInputs(dem = dem, art = art)
-#   lateness_features <- genLatenessMetrics(visits_data = visits, pharmacy_data = pharmacy)
-#   regimen_features <- genRegimenInputs(pharmacy_data = pharmacy)
-#   visits_inputs_features <- genVisitInputs(visits_data = visits)
-#   vl_features <- genVLInputs(lab = lab)
-#   
-#   all <- merge(dem_features, regimen_features, by = "PatientID", all.x = TRUE) %>%
-#     merge(., visits_inputs_features, by = "PatientID", all.x = TRUE) %>%
-#     merge(., lateness_features, by = "PatientID", all.x = TRUE) %>%
-#     merge(., vl_features, by = "PatientID", all.x = TRUE) %>%
-#     merge(., gis, by.x = "SiteCode", by.y = "FacilityCode", all.x = TRUE) %>%
-#     data.frame(.)
-#   
-#   all_wide <- encodeXGBoost(all[, !names(all) %in% c("PatientID", "SiteCode")])
-#   
-#   all_wide <- all_wide %>%
-#     select(xgb$feature_names)
-#   
-#   val_predict <- predict(xgb,newdata = data.matrix(all_wide))
-#   payload <- data.frame(
-#     all[, 1:56],
-#     "Prediction" = val_predict
-#   )
-#   
-#   write.csv(payload, paste0("iit_payload_", a, ".csv"), row.names = FALSE)
-#   print(paste0("Batch ", a, " completed"))
-# }
+dem <- dem[dem$PatientCCCNumber %in% unique(actives$PatientID), ]
+dem$DOB <- ymd(dem$DOB)
+dem$Age <- floor((Sys.Date() - dem$DOB) / 365)
+art <- read.csv('OneDrive_1_7-25-2022/ART_slim.csv', stringsAsFactors = FALSE)
+visits <- read.csv('visits_data_active_Aug_2022_20220923/visits_data_active_Aug_2022_20220923.csv', stringsAsFactors = FALSE)
+lab <- read.csv('OneDrive_1_7-25-2022/labs.slim.csv', stringsAsFactors = FALSE)
+pharmacy <- read.csv('OneDrive_1_7-25-2022/pharmacy_slim.csv', stringsAsFactors = FALSE)
+gis <- readRDS('gis_features_iit.rds') %>% dplyr::select(-Latitude, -Longitude)
+
+PATIENTS_IDS <- unique(dem$PatientID)
+
+vec <- floor(seq(1, length(PATIENTS_IDS), length.out = 100))
+
+for(a in 1:(length(vec)-1)){
+  print(Sys.time())
+  PATIENTS <- PATIENTS_IDS[vec[a]:vec[a+1]]
+
+  dem_features <- genDemographicInputs(dem = dem, art = art)
+  lateness_features <- genLatenessMetrics(visits_data = visits, pharmacy_data = pharmacy)
+  regimen_features <- genRegimenInputs(pharmacy_data = pharmacy)
+  visits_inputs_features <- genVisitInputs(visits_data = visits)
+  vl_features <- genVLInputs(lab = lab)
+
+  all <- merge(dem_features, regimen_features, by = "PatientID", all.x = TRUE) %>%
+    merge(., visits_inputs_features, by = "PatientID", all.x = TRUE) %>%
+    merge(., lateness_features, by = "PatientID", all.x = TRUE) %>%
+    merge(., vl_features, by = "PatientID", all.x = TRUE) %>%
+    merge(., gis, by.x = "SiteCode", by.y = "FacilityCode", all.x = TRUE) %>%
+    data.frame(.)
+
+  all_wide <- encodeXGBoost(all[, !names(all) %in% c("PatientID", "SiteCode")])
+
+  all_wide <- all_wide %>%
+    select(xgb$feature_names)
+
+  val_predict <- predict(xgb,newdata = data.matrix(all_wide))
+  payload <- data.frame(
+    all[, 1:56],
+    "Prediction" = val_predict
+  )
+
+  write.csv(payload, paste0("PredsSep2022/iit_payload_", a, ".csv"), row.names = FALSE)
+  print(paste0("Batch ", a, " completed"))
+}
 
 filenames <- list.files("~/Kenya/IIT", pattern="*.csv", full.names=TRUE)
 filenames <- filenames[grepl("payload", filenames)]
@@ -102,7 +102,7 @@ risks <- list()
 for(i in 1:nrow(preds)){
 
   if(i%%10000==0){print(i)}
-  
+
   pred <- preds[i, ]
   pat_list <- list()
   if(pred$timeOnArt %in% c(0:12)){pat_list[["Time On Art"]] <- pred$timeOnArt}
@@ -112,7 +112,7 @@ for(i in 1:nrow(preds)){
   if(pred$num_hiv_regimens %in% c(2:10)){pat_list[["Number HIV Regimens"]] <- pred$num_hiv_regimens}
   if(pred$StabilityAssessment %in% "Unstable"){pat_list[["Recent Stability"]] <- "Unstable"}
   risks[[i]] <- pat_list
-  
+
 }
 
 risks_out <- list()
@@ -138,6 +138,6 @@ for(i in 1:length(risks)){
 }
 
 jsonData <- toJSON(risks_out)
-write(jsonData, "iit_predictions_0902.json")
+write(jsonData, "iit_predictions_0925.json")
 # write.csv(preds, paste0("iit_preds_", Sys.Date(), ".csv"), row.names = FALSE)
 
