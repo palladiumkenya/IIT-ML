@@ -2,6 +2,30 @@
 
 genLatenessMetrics <- function(visits_data, pharmacy_data){
   
+  if(!"PatientID" %in% names(visits_data)){
+    stop("Visits table is lacking PatientID")
+  }
+  
+  if(!"VisitDate" %in% names(visits_data)){
+    stop("Visits table is lacking VisitDate")
+  }
+  
+  if(!"NextAppointmentDate" %in% names(visits_data)){
+    stop("Visits table is lacking NextAppointmentDate")
+  }
+ 
+  if(!"PatientId" %in% names(pharmacy_data)){
+    stop("Pharmacy table is lacking PatientId")
+  }
+  
+  if(!"DispenseDate" %in% names(pharmacy_data)){
+    stop("Pharmacy table is lacking DispenseDate")
+  }
+  
+  if(!"ExpectedReturn" %in% names(pharmacy_data)){
+    stop("Pharmacy table is lacking ExpectedReturn")
+  }
+  
   visits_data <- visits_data[visits_data$PatientID %in% PATIENTS, ]
   pharmacy_data <- pharmacy_data[pharmacy_data$PatientId %in% PATIENTS, ]
   

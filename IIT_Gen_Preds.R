@@ -23,8 +23,11 @@ dem$DOB <- ymd(dem$DOB)
 dem$Age <- floor((Sys.Date() - dem$DOB) / 365)
 art <- read.csv('OneDrive_1_7-25-2022/ART_slim.csv', stringsAsFactors = FALSE)
 visits <- read.csv('visits_data_active_Aug_2022_20220923/visits_data_active_Aug_2022_20220923.csv', stringsAsFactors = FALSE)
-lab <- read.csv('OneDrive_1_7-25-2022/labs.slim.csv', stringsAsFactors = FALSE)
-pharmacy <- read.csv('OneDrive_1_7-25-2022/pharmacy_slim.csv', stringsAsFactors = FALSE)
+lab <- read.csv('labs_active_patients_20220927/labs_active_patients_20220927.csv', stringsAsFactors = FALSE)
+lab$ReportedByDate <- lab$ReportedbyDate
+pharmacy <- read.csv('pharmacy_active_patients_20220927/pharmacy_active_patients_20220927.csv', stringsAsFactors = FALSE)
+pharmacy$PatientId <- pharmacy$PatientID
+pharmacy <- pharmacy %>% dplyr::select(-PatientID)
 gis <- readRDS('gis_features_iit.rds') %>% dplyr::select(-Latitude, -Longitude)
 
 PATIENTS_IDS <- unique(dem$PatientID)
@@ -59,11 +62,11 @@ for(a in 1:(length(vec)-1)){
     "Prediction" = val_predict
   )
 
-  write.csv(payload, paste0("PredsSep2022/iit_payload_", a, ".csv"), row.names = FALSE)
+  write.csv(payload, paste0("Dropbox/PredsSep2022/iit_payload_", a, ".csv"), row.names = FALSE)
   print(paste0("Batch ", a, " completed"))
 }
 
-filenames <- list.files("~/Kenya/IIT", pattern="*.csv", full.names=TRUE)
+filenames <- list.files("Dropbox/PredsSep2022/", pattern="*.csv", full.names=TRUE)
 filenames <- filenames[grepl("payload", filenames)]
 ldf <- lapply(filenames, read.csv)
 preds <- data.table::rbindlist(ldf, use.names = TRUE)
@@ -138,6 +141,6 @@ for(i in 1:length(risks)){
 }
 
 jsonData <- toJSON(risks_out)
-write(jsonData, "iit_predictions_0925.json")
+write(jsonData, "Dropbox/PredsSep2022/iit_predictions_0927.json")
 # write.csv(preds, paste0("iit_preds_", Sys.Date(), ".csv"), row.names = FALSE)
 
