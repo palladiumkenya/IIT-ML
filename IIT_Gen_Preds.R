@@ -34,7 +34,8 @@ PATIENTS_IDS <- unique(dem$PatientID)
 
 vec <- floor(seq(1, length(PATIENTS_IDS), length.out = 100))
 
-for(a in 1:(length(vec)-1)){
+foreach(a = 1:(length(vec)-1))%dopar%{
+  
   print(Sys.time())
   PATIENTS <- PATIENTS_IDS[vec[a]:vec[a+1]]
 
@@ -102,6 +103,7 @@ preds_out <- preds %>%
 # Time on ART < 12; Recent IIT > 0, Unscheduled Visits > 0, Optimized HIV Regimen = No
 # Number of HIV regimens > 1, Age over 35, Previously Not Stable
 risks <- list()
+
 for(i in 1:nrow(preds)){
 
   if(i%%10000==0){print(i)}
