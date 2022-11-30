@@ -67,37 +67,20 @@ all$SiteCode <- as.character(all$SiteCode)
 all <- merge(all, gis,by.x = "SiteCode", by.y = "FacilityCode", all.x = TRUE) %>%
   dplyr::select(-SiteCode)
 
-# all$Gender <- as.factor(all$Gender)
-# all$PatientSource <- as.factor(all$PatientSource)
-# all$MaritalStatus <- as.factor(all$MaritalStatus)
-# all$PopulationType <- as.factor(all$PopulationType)
-# all$TreatmentType <- as.factor(all$TreatmentType)
-# all$OptimizedHIVRegimen <- as.factor(all$OptimizedHIVRegimen)
-# all$Other_Regimen <- as.factor(all$Other_Regimen)
-# all$Pregnant <- as.factor(all$Pregnant)
-# all$DifferentiatedCare <- as.factor(all$DifferentiatedCare)
-# all$most_recent_art_adherence <- as.factor(all$most_recent_art_adherence)
-# all$most_recent_ctx_adherence <- as.factor(all$most_recent_ctx_adherence)
-# all$StabilityAssessment <- as.factor(all$StabilityAssessment)
-# all$most_recent_vl <- as.factor(all$most_recent_vl)
-
-# Save out sparse dataset --------
-# saveRDS(all, "iit_sparse.rds")
 
 # Simple Imputation -------------
 
+#partition and create training, testing data
 set.seed(2231)
 
 #partition and create training, testing data
-split <- createDataPartition(y = all$target,p = 0.8,list = FALSE)
-
-train_all <- all[split, ] 
+split <- createDataPartition(y = all$target,p = 0.6,list = FALSE)
+train <- all[split, ]
 test <- all[-split, ]
 
-split_val <- createDataPartition(y = train_all$target,p = 0.75,list = FALSE)
-
-train <- train_all[split_val, ]
-val <- train_all[-split_val, ]
+split_val <- createDataPartition(y = test$target,p = 0.5,list = FALSE)
+val <- test[split_val, ]
+test <- test[-split_val, ]
 
 sparse <- list("sparse_train" = train,
                "sparse_val" = val,
@@ -139,155 +122,144 @@ simple <- list("simple_train" = train,
                "simple_test" = test)
 
 # MICE Imputation -----------------
-
-mice.reuse <- function(mids, newdata, maxit = 5, printFlag = TRUE, seed = NA){
-
-
-  if(is.na(seed)){
-    assign(".Random.seed", mids$lastSeedValue, pos = 1)
-  } else {
-    set.seed(seed)
-  }
-
-  # Check that the newdata is the same as the old data
-  rows <- nrow(newdata)
-  cols <- ncol(newdata)
-  expect_equal(cols, ncol(mids$data))
-
-  nm <- names(newdata)
-  expect_equal(nm, names(mids$data))
-
-  # Set up a mids object for the newdata, but set all variables to missing
-  all_miss <- matrix(TRUE, rows, cols, dimnames = list(seq_len(rows), nm))
-  mids.new <- mice(newdata, mids$m, where = all_miss, maxit = 0,
-                   remove.collinear = FALSE, remove.constant = FALSE)
-
-  # Combine the old (trained) and the new mids objects
-  mids.comb <- mids.append(mids, mids.new)
-  new_idx <- mids.comb$app_idx
-  mids.comb <- mids.comb$mids
-
-  mids.comb$lastSeedValue <- .Random.seed # set the seed to the current value
-
-  # Set the newdata to missing (so it doesn't influence the imputation)
-  # but remember the actual values
-  actual_data <- mids.comb$data
-  mids.comb$data[mids.comb$where] <- NA
-
-  # Also make sure all observed variables in the newdata are set to their
-  # true values in the imputations
-  for(j in names(mids.comb$imp)){
-    for(i in seq_len(mids.comb$m)){
-      mids.comb$imp[[j]][, i] <-
-        replace_overimputes(actual_data, mids.comb$imp, j, i)
-    }
-  }
-
-  cond_imp <- "imp[[j]][, i] <- replace_overimputes(fetch_data(), imp, j, i)"
-  mids.comb$post <- sapply(mids.comb$post,
-                           function(x) if(x != "") paste0(x, "; ", cond_imp)
-                           else cond_imp)
-
-  # Run the procedure for a few times
-  mids.comb <- mice.mids(mids.comb, maxit = maxit, printFlag = printFlag)
-
-  # Return the imputed test dataset
-  res <- lapply(complete(mids.comb, "all"), function(x) x[new_idx, ])
-  class(res) <- c("mild", "list")
-  res
-}
-
-
-mids.append <- function(x, y){
-
-  expect_equal(names(x$data), names(y$data))
-  app <- x
-
-  miss_xy <- intersect(names(x$nmis), names(y$nmis))
-  expect_true(all(names(y$nmis) %in% miss_xy))
-
-  # Append `data`
-  app$data <- rbind(x$data, y$data)
-  x_idx <- rownames(x$data)
-  y_idx <- base::setdiff(rownames(app$data), x_idx)
-  names(y_idx) <- rownames(y$data)
-
-  # Append `imp` and `nmis`
-  for(i in names(x$imp)){
-    if(i %in% miss_xy){
-      # Imputations
-      app_imp <- y$imp[[i]]
-      rownames(app_imp) <- y_idx[rownames(app_imp)]
-      app$imp[[i]] <- rbind(x$imp[[i]], app_imp)
-
-      # nmis
-      app$nmis[[i]] <- x$nmis[[i]] + y$nmis[[i]]
-    }
-  }
-
-  # Append `where`
-  app$where <- rbind(x$where, y$where)
-  rownames(app$where) <- rownames(app$data)
-
-  list(mids = app, app_idx = setNames(y_idx, NULL))
-}
-
-
-replace_overimputes <- function(data, imp, j, i){
-
-  # Find those values that weren't missing but imputed
-  overlap <- base::intersect(
-    rownames(data[!is.na(data[, j]), j, drop = FALSE]),
-    rownames(imp[[j]])
-  )
-
-  # Replace them with the true values and return
-  imp[[j]][overlap, i] <- data[overlap, j]
-  imp[[j]][, i]
-}
-
-
-fetch_data <- function(){
-
-  get('actual_data', pos = parent.frame(5))
-}
-
+# MICE
 # Select variables for imputation (no target variable and no variables that are perfectly collinear)
 cols_to_not_impute <- c("target", "condom", "pnc", "pregnancies")
-all_to_impute <- all[, !names(all) %in% cols_to_not_impute]
 
-iit_impute_mice <- mice(all_to_impute,
+# get character columns
+char_cols <- names(all[, sapply(all, class) == 'character'])
+
+# convert character to factor?
+for(i in char_cols){
+  all[, i] <- as.factor(all[, i])
+}
+
+train_to_impute <- all[split, !names(all) %in% cols_to_not_impute]
+val_to_impute_total <- all[-split, !names(all) %in% cols_to_not_impute]
+
+
+
+all_impute_mice <- mice(train_to_impute,
+                        pred = quickpred(train_to_impute, minpuc = 0.1),
                         m = 5,
                         maxit = 5,
                         seed = 2231)
-iit_impute_mice_train <- complete(iit_impute_mice, action = "broad") # get all imputations
+
+all_impute_mice_train <- complete(all_impute_mice, action = "broad") # get all imputations
 
 # Get variables with missing fields
-vars_to_impute <- names(all_to_impute)[which(apply(all_to_impute, 2, function(x) any(is.na(x))))]
+vars_to_impute <- names(train_to_impute)[which(apply(train_to_impute, 2, function(x) any(is.na(x))))]
 
 # loop through vars_to_impute and average imputations
 for(i in vars_to_impute){
-  if(is.character(all[, i])){
-    # for factors, take mode
-    all_to_impute[,i] <- apply(iit_impute_mice_train[, c(paste0(i, ".1"), paste0(i, ".2"),
-                                                                  paste0(i, ".3"),paste0(i, ".4"), paste0(i, ".5"))],
-                                        1, function(x) unique(x)[which.max(tabulate(match(x, unique(x))))])
-  } else if(!is.character(all[, i])){
-    # for numerics, take mean
-    all_to_impute[,i] <- apply(iit_impute_mice_train[, c(paste0(i, ".1"), paste0(i, ".2"),
-                                                           paste0(i, ".3"), paste0(i, ".4"), paste0(i, ".5"))],
-                                                           1, function(x) mean(x))
+  for(j in 1:nrow(train_to_impute)){
+    if(is.na(train_to_impute[j,i]) & is.factor(train_to_impute[, i])){
+      x <- c(all_impute_mice_train[j, paste0(i, ".1")],
+             all_impute_mice_train[j, paste0(i, ".2")],
+             all_impute_mice_train[j, paste0(i, ".3")],
+             all_impute_mice_train[j, paste0(i, ".4")],
+             all_impute_mice_train[j, paste0(i, ".5")])
+      ux <- unique(x)
+      train_to_impute[j,i] <- ux[which.max(tabulate(match(x, ux)))]
+    }
+    if(is.na(train_to_impute[j,i]) & !is.numeric(train_to_impute[, i])){
+      x <- c(all_impute_mice_train[j, paste0(i, ".1")],
+             all_impute_mice_train[j, paste0(i, ".2")],
+             all_impute_mice_train[j, paste0(i, ".3")],
+             all_impute_mice_train[j, paste0(i, ".4")],
+             all_impute_mice_train[j, paste0(i, ".5")])
+      train_to_impute[j,i] <- mean(x)
+    }
   }
 }
 
-train_all <- all_to_impute[split, ]
-test <- all_to_impute[-split, ]
-train <- train_all[split_val, ]
-val <- train_all[-split_val, ]
+train_to_impute$target <- all[split, "target"]
 
-micelist <- list("mice_train" = train,
-                 "mice_val" = val,
-                 "mice_test" = test)
+## Val set
+# convert character to factor?
+char_cols <- char_cols[char_cols != "target"]
+for(i in char_cols){
+  val_to_impute_total[, i] <- as.factor(val_to_impute_total[, i])
+}
+
+vals_mice_wide <- mice.mids(all_impute_mice, newdata = val_to_impute_total)
+vals_mice_wide <- complete(vals_mice_wide, action = "broad") # get all imputations
+
+# loop through vars_to_impute and average imputations
+for(i in vars_to_impute){
+  for(j in 1:nrow(val_to_impute_total)){
+    if(is.na(val_to_impute_total[j,i]) & is.factor(val_to_impute_total[, i])){
+      x <- c(vals_mice_wide[j, paste0(i, ".1")],
+             vals_mice_wide[j, paste0(i, ".2")],
+             vals_mice_wide[j, paste0(i, ".3")],
+             vals_mice_wide[j, paste0(i, ".4")],
+             vals_mice_wide[j, paste0(i, ".5")])
+      ux <- unique(x)
+      val_to_impute_total[j,i] <- ux[which.max(tabulate(match(x, ux)))]
+    }
+    if(is.na(val_to_impute_total[j,i]) & is.numeric(val_to_impute_total[, i])){
+      x <- c(vals_mice_wide[j, paste0(i, ".1")],
+             vals_mice_wide[j, paste0(i, ".2")],
+             vals_mice_wide[j, paste0(i, ".3")],
+             vals_mice_wide[j, paste0(i, ".4")],
+             vals_mice_wide[j, paste0(i, ".5")])
+      val_to_impute_total[j,i] <- mean(x)
+    }
+  }
+}
+val_to_impute_total$target <- all[-split, "target"]
+val_mice <- val_to_impute_total[split_val, ]
+test_mice <- val_to_impute_total[-split_val, ]
+
+micelist <- list("mice_train" = train_to_impute,
+                 "mice_val" = val_mice,
+                 "mice_test" = test_mice)
 
 outlist <- c(sparse, simple, micelist)
-saveRDS(outlist, "iit_outlist.rds")
+
+# get columns with missing values
+train_sparse <- outlist$sparse_train
+val_sparse <- outlist$sparse_val
+test_sparse <- outlist$sparse_test
+
+# get columns with missing values from sparse dataset
+sparse_cols <- c()
+for(i in 1:ncol(train_sparse)){
+  vec <- train_sparse[, i]
+  if(any(is.na(vec))){
+    sparse_cols <- c(sparse_cols, names(train_sparse)[i])
+  }
+}
+
+# take just sparse columns
+sparse_sub <- train_sparse[, names(train_sparse) %in% sparse_cols]
+# change names of subset dataframe to indicate that these are binary variables
+names(sparse_sub) <- paste0(names(sparse_sub), "_bin")
+# Convert present values to 1, missing values to 0
+sparse_sub[!is.na(sparse_sub)] <- 1
+sparse_sub[is.na(sparse_sub)] <- 0
+sparse_sub <- sparse_sub %>% mutate_all(as.numeric)
+# Column bind this to simple and mice train sets
+outlist$simple_train <- cbind(outlist$simple_train, sparse_sub)
+outlist$mice_train <- cbind(outlist$mice_train, sparse_sub)
+
+# Repeat process for validation set
+sparse_sub <- val_sparse[, names(val_sparse) %in% sparse_cols]
+names(sparse_sub) <- paste0(names(sparse_sub), "_bin")
+sparse_sub[!is.na(sparse_sub)] <- 1
+sparse_sub[is.na(sparse_sub)] <- 0
+sparse_sub <- sparse_sub %>% mutate_all(as.numeric)
+outlist$simple_val <- cbind(outlist$simple_val, sparse_sub)
+outlist$mice_val <- cbind(outlist$mice_val, sparse_sub)
+
+# Repeat process for test set.
+sparse_sub <- test_sparse[, names(test_sparse) %in% sparse_cols]
+names(sparse_sub) <- paste0(names(sparse_sub), "_bin")
+sparse_sub[!is.na(sparse_sub)] <- 1
+sparse_sub[is.na(sparse_sub)] <- 0
+sparse_sub <- sparse_sub %>% mutate_all(as.numeric)
+outlist$simple_test <- cbind(outlist$simple_test, sparse_sub)
+outlist$mice_test <- cbind(outlist$mice_test, sparse_sub)
+
+
+saveRDS(outlist, "iit_outlist_1126.rds")
