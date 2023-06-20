@@ -295,23 +295,23 @@ saveRDS(grid_simple, "xgb_iit_simple.rds")
 
 # Let's try this for random forest now ----------
 
-# train_data <- iit %>% 
-#   ungroup() %>%
-#   filter(patient_group == 1) %>% 
-#   select(-patient_group) %>%
-#   arrange(PredictionDate) %>%
-#   select(-PredictionDate, - key) 
-# 
-# test_data <- iit %>% 
-#   ungroup() %>%
-#   filter(patient_group == 2) %>% 
-#   select(-patient_group) %>%
-#   arrange(PredictionDate) %>%
-#   select(-PredictionDate, - key) 
-# 
-# # Create folds
-# nfolds <- 10
-# cuts <- seq(min(train_data$PredictionDate), max(train_data$PredictionDate), length.out = nfolds + 2)
+train_data <- iit %>%
+  ungroup() %>%
+  filter(patient_group == 1) %>%
+  select(-patient_group) %>%
+  arrange(PredictionDate) %>%
+  select(-PredictionDate, - key)
+
+test_data <- iit %>%
+  ungroup() %>%
+  filter(patient_group == 2) %>%
+  select(-patient_group) %>%
+  arrange(PredictionDate) %>%
+  select(-PredictionDate, - key)
+
+# Create folds
+nfolds <- 10
+cuts <- seq(min(train_data$PredictionDate), max(train_data$PredictionDate), length.out = nfolds + 2)
 
 grid_rf_simple <- expand.grid(model = "rf",
                               sparsity = "simple",
@@ -325,7 +325,7 @@ for(i in 1:nrow(grid_rf_simple)){
   aucpr <- c()
   
   for(j in 1:nfolds){
-    
+    print(j)
     # Set train and validation
     tmp <-  train_data %>%
       group_by(key) %>% 
