@@ -9,6 +9,16 @@ library(tidyr)
 numCores <- detectCores()
 registerDoParallel(numCores)
 
+# # get the keys from the .Renviron file and connect to the server
+# Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAXRAVXGNNKTISKPEH",
+#            "AWS_SECRET_ACCESS_KEY" = "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",
+#            "AWS_DEFAULT_REGION" = "us-east-1")
+# # name the bucket
+# aws_bucket <- "kehmishtstest"
+# 
+# # get the bucket
+# get_bucket(aws_bucket)
+
 print("starting")
 
 dem <- readRDS("patients_samp250k.rds")
